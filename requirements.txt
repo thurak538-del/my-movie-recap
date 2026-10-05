@@ -1,5 +1,6 @@
-fastapi
+edge-tts
 uvicorn[standard]
 python-multipart
 requests
 edge-tts
+faster-whisper
