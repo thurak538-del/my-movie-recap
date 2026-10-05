@@ -3,7 +3,8 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from .pipeline import build, dur, transcribe, write_script
+from .pipeline import build, dur, write_script
+from .whisper_local import transcribe
 
 DATA = Path(os.getenv("DATA_DIR", "data"))
 MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
@@ -11,13 +12,13 @@ JOBS = {}
 app = FastAPI(title="My Movie Recap")
 
 
-def worker(jid, video, groq, gem, voice, rate, minutes):
+def worker(jid, video, gem, voice, rate, minutes):
     j, wd = JOBS[jid], DATA / jid
     st = lambda p, m: j.update(progress=p, message=m)
     try:
         total = dur(video)
-        st(5, "စာထုတ်နေသည် (Whisper)")
-        segs = transcribe(video, wd, groq)
+        st(5, "စာထုတ်နေသည် (faster-whisper) - ပထမဆုံးအကြိမ် model download ကြာနိုင်သည်")
+        segs = transcribe(video, wd)
         st(20, "Recap script ရေးနေသည် (Gemini)")
         lines = write_script(segs, total, minutes, gem, MODEL)
         (wd / "script.json").write_text(json.dumps(lines, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -30,10 +31,9 @@ def worker(jid, video, groq, gem, voice, rate, minutes):
 @app.post("/api/jobs")
 def create(file: UploadFile = File(...), groq_key: str = Form(""), gemini_key: str = Form(""),
            voice: str = Form("my-MM-ThihaNeural"), rate: str = Form("+0%"), minutes: float = Form(5)):
-    groq = groq_key or os.getenv("GROQ_API_KEY", "")
     gem = gemini_key or os.getenv("GEMINI_API_KEY", "")
-    if not groq or not gem:
-        raise HTTPException(400, "Groq key နဲ့ Gemini key လိုအပ်ပါတယ်")
+    if not gem:
+        raise HTTPException(400, "Gemini key လိုအပ်ပါတယ်")
     jid = uuid.uuid4().hex[:10]
     wd = DATA / jid
     wd.mkdir(parents=True)
@@ -41,7 +41,7 @@ def create(file: UploadFile = File(...), groq_key: str = Form(""), gemini_key: s
     with open(video, "wb") as f:
         shutil.copyfileobj(file.file, f)
     JOBS[jid] = {"status": "running", "progress": 1, "message": "စတင်နေသည်"}
-    threading.Thread(target=worker, args=(jid, video, groq, gem, voice, rate, minutes), daemon=True).start()
+    threading.Thread(target=worker, args=(jid, video, gem, voice, rate, minutes), daemon=True).start()
     return {"id": jid}
 
 
