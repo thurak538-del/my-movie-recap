@@ -1,0 +1,37 @@
+<!doctype html><html lang="my"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>My Movie Recap</title>
+<style>
+body{font-family:"Noto Sans Myanmar","Padauk",system-ui,sans-serif;max-width:560px;margin:0 auto;padding:16px;background:#f4f5fb;color:#1b1b2f}
+label{display:block;margin:12px 0 4px;font-weight:600}input,select,button{width:100%;padding:12px;border-radius:10px;border:1px solid #c9cce0;font-size:16px;box-sizing:border-box}
+button{background:#4f46e5;color:#fff;border:0;font-weight:700;margin-top:18px}.bar{height:10px;background:#dde;border-radius:6px;margin-top:16px}
+#fill{height:100%;width:0;background:#4f46e5;border-radius:6px;transition:width .4s}a{display:inline-block;margin:10px 10px 0 0;color:#4f46e5;font-weight:600}
+</style></head><body>
+<h2>🎬 Movie Recap Studio</h2>
+<label>ဗီဒီယိုဖိုင် (MP4/MKV/MOV)</label><input type="file" id="file" accept="video/*">
+<label>Groq API key</label><input id="groq" type="password" autocomplete="off">
+<label>Gemini API key</label><input id="gem" type="password" autocomplete="off">
+<label>အသံ</label><select id="voice"><option value="my-MM-ThihaNeural">Thiha (ကျား)</option><option value="my-MM-NilarNeural">Nilar (မ)</option></select>
+<label>အသံမြန်နှုန်း</label><select id="rate"><option>+0%</option><option>+5%</option><option>+10%</option><option>-5%</option></select>
+<label>Recap အရှည် (မိနစ်)</label><input id="min" type="number" value="5" min="1" max="30">
+<button id="go">စတင်မယ်</button>
+<div class="bar"><div id="fill"></div></div><p id="msg"></p><div id="out"></div>
+<script>
+const $=i=>document.getElementById(i);
+$("groq").value=localStorage.groq||"";$("gem").value=localStorage.gem||"";
+$("go").onclick=async()=>{
+ if(!$("file").files[0])return alert("ဗီဒီယိုရွေးပါ");
+ localStorage.groq=$("groq").value;localStorage.gem=$("gem").value;
+ const f=new FormData();f.append("file",$("file").files[0]);f.append("groq_key",$("groq").value);f.append("gemini_key",$("gem").value);
+ f.append("voice",$("voice").value);f.append("rate",$("rate").value);f.append("minutes",$("min").value);
+ $("msg").textContent="တင်နေသည်...";$("out").innerHTML="";
+ const r=await fetch("/api/jobs",{method:"POST",body:f});
+ if(!r.ok){$("msg").textContent=(await r.json()).detail;return}
+ const {id}=await r.json();
+ const t=setInterval(async()=>{
+  const s=await (await fetch("/api/jobs/"+id)).json();
+  $("fill").style.width=s.progress+"%";$("msg").textContent=s.message;
+  if(s.status!="running"){clearInterval(t);
+   if(s.status=="done")$("out").innerHTML=["video:Video","srt:SRT စာတန်း","script:Script"].map(x=>{const[k,n]=x.split(":");return `<a href="/api/jobs/${id}/download/${k}">⬇ ${n}</a>`}).join("")}
+ },2000);
+};
+</script></body></html>
